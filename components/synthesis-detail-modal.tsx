@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { SynthesisWithDetails } from '@/lib/types'
@@ -17,6 +19,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   FlaskConical,
   Beaker,
   ListOrdered,
@@ -29,12 +41,15 @@ import {
   Hash,
   Atom,
   ArrowRight,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 
 interface SynthesisDetailModalProps {
   synthesisId: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  isAdmin?: boolean
 }
 
 const difficultyColors: Record<string, string> = {
@@ -84,7 +99,12 @@ async function fetchSynthesisDetails(id: string): Promise<SynthesisWithDetails |
   }
 }
 
-export function SynthesisDetailModal({ synthesisId, open, onOpenChange }: SynthesisDetailModalProps) {
+export function SynthesisDetailModal({ synthesisId, open, onOpenChange, isAdmin = false }: SynthesisDetailModalProps) {
+  const router = useRouter()
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
   const { data: synthesis, isLoading } = useSWR(
     synthesisId && open ? `synthesis-${synthesisId}` : null,
     () => fetchSynthesisDetails(synthesisId!),
@@ -94,6 +114,21 @@ export function SynthesisDetailModal({ synthesisId, open, onOpenChange }: Synthe
   const handleExportPDF = async () => {
     if (!synthesis) return
     window.open(`/api/export-pdf/${synthesis.id}`, '_blank')
+  }
+
+  const handleDelete = async () => {
+    if (!synthesis) return
+    setIsDeleting(true)
+    setDeleteError(null)
+    const { error } = await createClient().rpc('delete_synthesis', { p_id: synthesis.id })
+    setIsDeleting(false)
+    if (error) {
+      setDeleteError(error.message)
+      return
+    }
+    setConfirmDeleteOpen(false)
+    onOpenChange(false)
+    router.refresh()
   }
 
   return (
@@ -117,10 +152,31 @@ export function SynthesisDetailModal({ synthesisId, open, onOpenChange }: Synthe
                     </p>
                   )}
                 </div>
-                <Button onClick={handleExportPDF} variant="outline" size="sm" className="gap-2 flex-shrink-0">
-                  <Download className="h-4 w-4" />
-                  Export PDF
-                </Button>
+                <div className="flex flex-shrink-0 flex-wrap justify-end gap-2">
+                  {isAdmin && (
+                    <>
+                      <Link href={`/edit/${synthesis.id}`}>
+                        <Button variant="outline" size="sm" className="gap-2">
+                          <Pencil className="h-4 w-4" />
+                          Edit
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2 text-destructive hover:text-destructive"
+                        onClick={() => setConfirmDeleteOpen(true)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </Button>
+                    </>
+                  )}
+                  <Button onClick={handleExportPDF} variant="outline" size="sm" className="gap-2">
+                    <Download className="h-4 w-4" />
+                    Export PDF
+                  </Button>
+                </div>
               </div>
 
               {/* Quick Info */}
@@ -395,6 +451,33 @@ export function SynthesisDetailModal({ synthesisId, open, onOpenChange }: Synthe
           </div>
         )}
       </DialogContent>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this protocol?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {synthesis?.name} and all of its reactions, materials and steps will be
+              permanently deleted. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleDelete()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {isDeleting && <Spinner className="mr-2 h-4 w-4" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }

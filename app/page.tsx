@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getIsAdmin } from '@/lib/supabase/admin'
 import { AppShell } from '@/components/app-shell'
 import { SynthesisBrowser } from '@/components/synthesis-browser'
 
@@ -8,7 +9,8 @@ export default async function HomePage() {
   const [
     { data: syntheses },
     { data: categories },
-    { data: chemicals }
+    { data: chemicals },
+    isAdmin
   ] = await Promise.all([
     supabase
       .from('syntheses')
@@ -21,7 +23,8 @@ export default async function HomePage() {
     supabase
       .from('chemicals')
       .select('*')
-      .order('name')
+      .order('name'),
+    getIsAdmin()
   ])
 
   const lowStockChemicals = chemicals?.filter(
@@ -29,10 +32,11 @@ export default async function HomePage() {
   ) || []
 
   return (
-    <AppShell lowStockCount={lowStockChemicals.length}>
+    <AppShell lowStockCount={lowStockChemicals.length} isAdmin={isAdmin}>
       <SynthesisBrowser 
         initialSyntheses={syntheses || []}
         categories={categories || []}
+        isAdmin={isAdmin}
       />
     </AppShell>
   )

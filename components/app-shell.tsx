@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -15,22 +16,34 @@ import {
   AlertTriangle,
   Beaker,
   FileText,
+  Lock,
+  LogOut,
 } from 'lucide-react'
 
 interface AppShellProps {
   children: React.ReactNode
   lowStockCount?: number
+  isAdmin?: boolean
 }
 
-const navigation = [
-  { name: 'Synthesis Database', href: '/', icon: FlaskConical },
-  { name: 'Add Synthesis', href: '/add', icon: Plus },
-  { name: 'Inventory', href: '/inventory', icon: Package },
+const allNavigation = [
+  { name: 'Synthesis Database', href: '/', icon: FlaskConical, adminOnly: false },
+  { name: 'Add Synthesis', href: '/add', icon: Plus, adminOnly: true },
+  { name: 'Inventory', href: '/inventory', icon: Package, adminOnly: false },
 ]
 
-export function AppShell({ children, lowStockCount = 0 }: AppShellProps) {
+export function AppShell({ children, lowStockCount = 0, isAdmin = false }: AppShellProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const navigation = allNavigation.filter((item) => isAdmin || !item.adminOnly)
+
+  const handleSignOut = async () => {
+    await createClient().auth.signOut()
+    setMobileMenuOpen(false)
+    router.push('/')
+    router.refresh()
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -73,6 +86,19 @@ export function AppShell({ children, lowStockCount = 0 }: AppShellProps) {
                 </Link>
               )
             })}
+            {isAdmin ? (
+              <Button variant="ghost" size="sm" className="gap-2" onClick={handleSignOut}>
+                <LogOut className="h-4 w-4" />
+                Sign out
+              </Button>
+            ) : (
+              <Link href="/login">
+                <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
+                  <Lock className="h-4 w-4" />
+                  Admin
+                </Button>
+              </Link>
+            )}
           </nav>
 
           {/* Mobile menu button */}
@@ -118,6 +144,19 @@ export function AppShell({ children, lowStockCount = 0 }: AppShellProps) {
                   </Link>
                 )
               })}
+              {isAdmin ? (
+                <Button variant="ghost" className="w-full justify-start gap-2" onClick={handleSignOut}>
+                  <LogOut className="h-4 w-4" />
+                  Sign out
+                </Button>
+              ) : (
+                <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground">
+                    <Lock className="h-4 w-4" />
+                    Admin login
+                  </Button>
+                </Link>
+              )}
             </nav>
           </div>
         )}

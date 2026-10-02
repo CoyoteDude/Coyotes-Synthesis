@@ -28,6 +28,7 @@ import { SynthesisDetailModal } from './synthesis-detail-modal'
 interface SynthesisBrowserProps {
   initialSyntheses: (Synthesis & { category: Category | null })[]
   categories: Category[]
+  isAdmin?: boolean
 }
 
 const difficultyColors: Record<string, string> = {
@@ -37,7 +38,7 @@ const difficultyColors: Record<string, string> = {
   expert: 'bg-destructive/10 text-destructive border-destructive/20',
 }
 
-export function SynthesisBrowser({ initialSyntheses, categories }: SynthesisBrowserProps) {
+export function SynthesisBrowser({ initialSyntheses, categories, isAdmin = false }: SynthesisBrowserProps) {
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all')
@@ -241,6 +242,7 @@ export function SynthesisBrowser({ initialSyntheses, categories }: SynthesisBrow
         synthesisId={selectedSynthesis?.id || null}
         open={modalOpen}
         onOpenChange={setModalOpen}
+        isAdmin={isAdmin}
       />
     </div>
   )

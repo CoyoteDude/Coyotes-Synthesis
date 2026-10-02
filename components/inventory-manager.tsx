@@ -50,6 +50,7 @@ interface InventoryManagerProps {
   initialChemicals: Chemical[]
   lowStockChemicals: Chemical[]
   chemicalsUsedInSyntheses: string[]
+  isAdmin?: boolean
 }
 
 type SortField = 'name' | 'current_quantity' | 'minimum_quantity' | 'location'
@@ -59,6 +60,7 @@ export function InventoryManager({
   initialChemicals,
   lowStockChemicals,
   chemicalsUsedInSyntheses,
+  isAdmin = false,
 }: InventoryManagerProps) {
   const router = useRouter()
   const [chemicals, setChemicals] = useState(initialChemicals)
@@ -271,10 +273,12 @@ export function InventoryManager({
             {chemicals.length} chemicals in stock
           </p>
         </div>
-        <Button onClick={() => setAddChemicalModalOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Chemical
-        </Button>
+        {isAdmin && (
+          <Button onClick={() => setAddChemicalModalOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Chemical
+          </Button>
+        )}
       </div>
 
       {/* Low Stock Warnings */}
@@ -372,13 +376,13 @@ export function InventoryManager({
                     </div>
                   </TableHead>
                   <TableHead>State</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  {isAdmin && <TableHead className="text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredAndSortedChemicals.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8">
                       <Package className="mx-auto h-8 w-8 text-muted-foreground/50" />
                       <p className="mt-2 text-muted-foreground">No chemicals found</p>
                     </TableCell>
@@ -429,6 +433,7 @@ export function InventoryManager({
                       <TableCell className="capitalize">
                         {chemical.state || '-'}
                       </TableCell>
+                      {isAdmin && (
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
                           <Button
@@ -451,6 +456,7 @@ export function InventoryManager({
                           </Button>
                         </div>
                       </TableCell>
+                      )}
                     </TableRow>
                   ))
                 )}

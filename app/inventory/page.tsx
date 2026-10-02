@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getIsAdmin } from '@/lib/supabase/admin'
 import { AppShell } from '@/components/app-shell'
 import { InventoryManager } from '@/components/inventory-manager'
 
@@ -7,7 +8,8 @@ export default async function InventoryPage() {
   
   const [
     { data: chemicals },
-    { data: syntheses }
+    { data: syntheses },
+    isAdmin
   ] = await Promise.all([
     supabase
       .from('chemicals')
@@ -22,7 +24,8 @@ export default async function InventoryPage() {
           chemical_name,
           formula
         )
-      `)
+      `),
+    getIsAdmin()
   ])
 
   const lowStockChemicals = chemicals?.filter(
@@ -38,11 +41,12 @@ export default async function InventoryPage() {
   })
 
   return (
-    <AppShell lowStockCount={lowStockChemicals.length}>
+    <AppShell lowStockCount={lowStockChemicals.length} isAdmin={isAdmin}>
       <InventoryManager 
         initialChemicals={chemicals || []}
         lowStockChemicals={lowStockChemicals}
         chemicalsUsedInSyntheses={Array.from(chemicalsUsedInSyntheses)}
+        isAdmin={isAdmin}
       />
     </AppShell>
   )

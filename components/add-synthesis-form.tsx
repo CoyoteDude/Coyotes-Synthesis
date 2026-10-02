@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { mutate } from 'swr'
 import { createClient } from '@/lib/supabase/client'
-import { Category } from '@/lib/types'
+import { Category, SynthesisWithDetails } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -39,6 +40,8 @@ import {
 
 interface AddSynthesisFormProps {
   categories: Category[]
+  // When set, the form edits this protocol instead of creating a new one.
+  initial?: SynthesisWithDetails
 }
 
 interface ReactionForm {
@@ -103,32 +106,78 @@ const emptyStep: StepForm = {
   tips: '',
 }
 
-export function AddSynthesisForm({ categories }: AddSynthesisFormProps) {
+function initialReactions(initial?: SynthesisWithDetails): ReactionForm[] {
+  if (!initial?.reactions.length) return [{ ...emptyReaction }]
+  return initial.reactions.map((r) => ({
+    reaction_equation: r.reaction_equation,
+    reaction_type: r.reaction_type ?? '',
+    conditions: r.conditions ?? '',
+    temperature: r.temperature ?? '',
+    pressure: r.pressure ?? '',
+    duration: r.duration ?? '',
+    catalyst: r.catalyst ?? '',
+    solvent: r.solvent ?? '',
+  }))
+}
+
+function initialMaterials(initial?: SynthesisWithDetails): MaterialForm[] {
+  if (!initial?.starting_materials.length) return [{ ...emptyMaterial }]
+  return initial.starting_materials.map((m) => ({
+    chemical_name: m.chemical_name,
+    formula: m.formula ?? '',
+    cas_number: m.cas_number ?? '',
+    amount: m.amount ?? '',
+    purity: m.purity ?? '',
+    state: m.state ?? '',
+    notes: m.notes ?? '',
+  }))
+}
+
+function initialSteps(initial?: SynthesisWithDetails): StepForm[] {
+  if (!initial?.steps.length) return [{ ...emptyStep }]
+  return initial.steps.map((st) => ({
+    title: st.title ?? '',
+    description: st.description,
+    duration: st.duration ?? '',
+    temperature: st.temperature ?? '',
+    equipment: st.equipment?.join(', ') ?? '',
+    safety_warnings: st.safety_warnings?.join(', ') ?? '',
+    tips: st.tips ?? '',
+  }))
+}
+
+const splitList = (value: string) => {
+  const items = value.split(',').map((v) => v.trim()).filter(Boolean)
+  return items.length > 0 ? items : null
+}
+
+export function AddSynthesisForm({ categories, initial }: AddSynthesisFormProps) {
   const router = useRouter()
+  const isEditing = !!initial
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Basic info
-  const [name, setName] = useState('')
-  const [formula, setFormula] = useState('')
-  const [molecularWeight, setMolecularWeight] = useState('')
-  const [casNumber, setCasNumber] = useState('')
-  const [structureSmiles, setStructureSmiles] = useState('')
-  const [categoryId, setCategoryId] = useState('')
-  const [difficulty, setDifficulty] = useState('')
-  const [yieldPercentage, setYieldPercentage] = useState('')
-  const [totalTime, setTotalTime] = useState('')
-  const [safetyNotes, setSafetyNotes] = useState('')
-  const [notes, setNotes] = useState('')
+  const [name, setName] = useState(initial?.name ?? '')
+  const [formula, setFormula] = useState(initial?.formula ?? '')
+  const [molecularWeight, setMolecularWeight] = useState(initial?.molecular_weight?.toString() ?? '')
+  const [casNumber, setCasNumber] = useState(initial?.cas_number ?? '')
+  const [structureSmiles, setStructureSmiles] = useState(initial?.structure_smiles ?? '')
+  const [categoryId, setCategoryId] = useState(initial?.category_id ?? '')
+  const [difficulty, setDifficulty] = useState<string>(initial?.difficulty ?? '')
+  const [yieldPercentage, setYieldPercentage] = useState(initial?.yield_percentage?.toString() ?? '')
+  const [totalTime, setTotalTime] = useState(initial?.total_time ?? '')
+  const [safetyNotes, setSafetyNotes] = useState(initial?.safety_notes ?? '')
+  const [notes, setNotes] = useState(initial?.notes ?? '')
 
   // Reactions
-  const [reactions, setReactions] = useState<ReactionForm[]>([{ ...emptyReaction }])
+  const [reactions, setReactions] = useState<ReactionForm[]>(() => initialReactions(initial))
 
   // Starting Materials
-  const [materials, setMaterials] = useState<MaterialForm[]>([{ ...emptyMaterial }])
+  const [materials, setMaterials] = useState<MaterialForm[]>(() => initialMaterials(initial))
 
   // Steps
-  const [steps, setSteps] = useState<StepForm[]>([{ ...emptyStep }])
+  const [steps, setSteps] = useState<StepForm[]>(() => initialSteps(initial))
 
   // Reaction handlers
   const addReaction = () => setReactions([...reactions, { ...emptyReaction }])
@@ -177,10 +226,10 @@ export function AddSynthesisForm({ categories }: AddSynthesisFormProps) {
     try {
       const supabase = createClient()
 
-      // Insert synthesis
-      const { data: synthesis, error: synthesisError } = await supabase
-        .from('syntheses')
-        .insert({
+      // Saved in one database transaction (see save_synthesis in supabase/migrations).
+      const { error: saveError } = await supabase.rpc('save_synthesis', {
+        p_id: initial?.id ?? null,
+        p_synthesis: {
           name,
           formula: formula || null,
           molecular_weight: molecularWeight ? parseFloat(molecularWeight) : null,
@@ -192,83 +241,56 @@ export function AddSynthesisForm({ categories }: AddSynthesisFormProps) {
           total_time: totalTime || null,
           safety_notes: safetyNotes || null,
           notes: notes || null,
-          is_default: false,
-        })
-        .select()
-        .single()
+        },
+        p_reactions: reactions
+          .filter(r => r.reaction_equation.trim())
+          .map((r, index) => ({
+            reaction_equation: r.reaction_equation,
+            reaction_type: r.reaction_type || null,
+            conditions: r.conditions || null,
+            temperature: r.temperature || null,
+            pressure: r.pressure || null,
+            duration: r.duration || null,
+            catalyst: r.catalyst || null,
+            solvent: r.solvent || null,
+            order_index: index,
+          })),
+        p_materials: materials
+          .filter(m => m.chemical_name.trim())
+          .map((m) => ({
+            chemical_name: m.chemical_name,
+            formula: m.formula || null,
+            cas_number: m.cas_number || null,
+            amount: m.amount || null,
+            purity: m.purity || null,
+            state: m.state || null,
+            notes: m.notes || null,
+          })),
+        p_steps: steps
+          .filter(st => st.description.trim())
+          .map((st, index) => ({
+            step_number: index + 1,
+            title: st.title || null,
+            description: st.description,
+            duration: st.duration || null,
+            temperature: st.temperature || null,
+            equipment: splitList(st.equipment),
+            safety_warnings: splitList(st.safety_warnings),
+            tips: st.tips || null,
+          })),
+      })
 
-      if (synthesisError) throw synthesisError
+      if (saveError) throw saveError
 
-      const synthesisId = synthesis.id
-
-      // Insert reactions
-      const validReactions = reactions.filter(r => r.reaction_equation.trim())
-      if (validReactions.length > 0) {
-        const { error: reactionsError } = await supabase
-          .from('synthesis_reactions')
-          .insert(
-            validReactions.map((r, index) => ({
-              synthesis_id: synthesisId,
-              reaction_equation: r.reaction_equation,
-              reaction_type: r.reaction_type || null,
-              conditions: r.conditions || null,
-              temperature: r.temperature || null,
-              pressure: r.pressure || null,
-              duration: r.duration || null,
-              catalyst: r.catalyst || null,
-              solvent: r.solvent || null,
-              order_index: index,
-            }))
-          )
-        if (reactionsError) throw reactionsError
-      }
-
-      // Insert starting materials
-      const validMaterials = materials.filter(m => m.chemical_name.trim())
-      if (validMaterials.length > 0) {
-        const { error: materialsError } = await supabase
-          .from('synthesis_starting_materials')
-          .insert(
-            validMaterials.map((m) => ({
-              synthesis_id: synthesisId,
-              chemical_name: m.chemical_name,
-              formula: m.formula || null,
-              cas_number: m.cas_number || null,
-              amount: m.amount || null,
-              purity: m.purity || null,
-              state: m.state || null,
-              notes: m.notes || null,
-            }))
-          )
-        if (materialsError) throw materialsError
-      }
-
-      // Insert steps
-      const validSteps = steps.filter(s => s.description.trim())
-      if (validSteps.length > 0) {
-        const { error: stepsError } = await supabase
-          .from('synthesis_steps')
-          .insert(
-            validSteps.map((s, index) => ({
-              synthesis_id: synthesisId,
-              step_number: index + 1,
-              title: s.title || null,
-              description: s.description,
-              duration: s.duration || null,
-              temperature: s.temperature || null,
-              equipment: s.equipment ? s.equipment.split(',').map(e => e.trim()) : null,
-              safety_warnings: s.safety_warnings ? s.safety_warnings.split(',').map(w => w.trim()) : null,
-              tips: s.tips || null,
-            }))
-          )
-        if (stepsError) throw stepsError
-      }
+      // Drop the cached copy the detail view keeps, so it shows the new version.
+      if (initial) await mutate(`synthesis-${initial.id}`, undefined, { revalidate: false })
 
       router.push('/')
       router.refresh()
     } catch (err) {
-      console.error('Error creating synthesis:', err)
-      setError(err instanceof Error ? err.message : 'Failed to create synthesis')
+      console.error('Error saving synthesis:', err)
+      const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : null
+      setError(message || 'Failed to save synthesis')
     } finally {
       setIsSubmitting(false)
     }
@@ -279,9 +301,13 @@ export function AddSynthesisForm({ categories }: AddSynthesisFormProps) {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Add New Synthesis</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            {isEditing ? 'Edit Synthesis' : 'Add New Synthesis'}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Create a new synthesis protocol with detailed steps and materials
+            {isEditing
+              ? `Update the protocol for ${initial.name}`
+              : 'Create a new synthesis protocol with detailed steps and materials'}
           </p>
         </div>
         <Button type="submit" disabled={isSubmitting || !name.trim()} className="gap-2">
@@ -290,7 +316,7 @@ export function AddSynthesisForm({ categories }: AddSynthesisFormProps) {
           ) : (
             <Save className="h-4 w-4" />
           )}
-          Save Protocol
+          {isEditing ? 'Save Changes' : 'Save Protocol'}
         </Button>
       </div>
 
@@ -795,7 +821,7 @@ export function AddSynthesisForm({ categories }: AddSynthesisFormProps) {
           ) : (
             <Save className="h-4 w-4" />
           )}
-          Save Protocol
+          {isEditing ? 'Save Changes' : 'Save Protocol'}
         </Button>
       </div>
     </form>

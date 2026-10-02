@@ -1,8 +1,12 @@
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getIsAdmin } from '@/lib/supabase/admin'
 import { AppShell } from '@/components/app-shell'
 import { AddSynthesisForm } from '@/components/add-synthesis-form'
 
 export default async function AddSynthesisPage() {
+  if (!(await getIsAdmin())) redirect('/login?next=/add')
+
   const supabase = await createClient()
   
   const [
@@ -18,7 +22,7 @@ export default async function AddSynthesisPage() {
   ) || []
 
   return (
-    <AppShell lowStockCount={lowStockChemicals.length}>
+    <AppShell lowStockCount={lowStockChemicals.length} isAdmin>
       <AddSynthesisForm categories={categories || []} />
     </AppShell>
   )
