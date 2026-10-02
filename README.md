@@ -1,1 +1,0 @@
-# Coyotes-Synthesis
