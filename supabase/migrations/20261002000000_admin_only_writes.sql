@@ -14,7 +14,7 @@ create table if not exists public.admin_users (
 
 alter table public.admin_users enable row level security;
 
--- Each signed-in user may see only their own admin row (used by is_admin()).
+-- Each signed-in user may see only their own admin row, which is all is_admin() needs.
 drop policy if exists "admin_users self read" on public.admin_users;
 create policy "admin_users self read" on public.admin_users
   for select to authenticated
@@ -24,7 +24,7 @@ create or replace function public.is_admin()
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = ''
 as $$
   select exists (

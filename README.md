@@ -10,19 +10,21 @@ Next.js app (originally generated with v0) backed by Supabase.
 
 The rule is enforced in the database (Supabase row-level security), not just by hiding buttons.
 
+## Database
+
+Supabase project `hvewliqztlbyrafakfjp`. Schema and access rules live in
+`supabase/migrations/` (base tables first, then the admin-only write rules).
+
 ## One-time admin setup
 
-1. **Run the migration.** In the Supabase dashboard for the site's project, open
-   *SQL Editor*, paste `supabase/migrations/20261002000000_admin_only_writes.sql`, and run it.
-   Until this is run, the edit form and delete button will not work.
-2. **Create your login.** *Authentication → Users → Add user → Create new user*,
+1. **Create your login.** *Authentication → Users → Add user → Create new user*,
    with your email and a strong password (tick "Auto confirm user").
-3. **Make that user an admin.** In the SQL Editor:
+2. **Make that user an admin.** In the SQL Editor:
    ```sql
    insert into public.admin_users (user_id)
    select id from auth.users where email = 'you@example.com';
    ```
-4. **Turn off public sign-ups.** *Authentication → Sign In / Providers →* disable
+3. **Turn off public sign-ups.** *Authentication → Sign In / Providers →* disable
    "Allow new users to sign up", so nobody else can create an account.
 
 ## Development
